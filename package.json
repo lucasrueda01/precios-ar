@@ -1,0 +1,23 @@
+{
+  "name": "precioar-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "PrecioAR - Buscador y comparador de precios de supermercados en Argentina (SEPA)",
+  "scripts": {
+    "dev:frontend": "npm run dev --prefix frontend",
+    "dev:backend": "uvicorn backend.main:app --reload",
+    "build:frontend": "npm run build --prefix frontend",
+    "lint:frontend": "npm run lint --prefix frontend"
+  },
+  "keywords": [
+    "precioar",
+    "sepa",
+    "argentina",
+    "supermercados",
+    "fastapi",
+    "nextjs",
+    "monorepo"
+  ],
+  "author": "",
+  "license": "UNLICENSED"
+}

@@ -1,0 +1,118 @@
+import sqlalchemy as sa
+
+engine = sa.create_engine(
+    "postgresql+psycopg2://",
+    connect_args={
+        "host": "localhost",
+        "port": 5432,
+        "dbname": "precioar",
+        "user": "postgres",
+        "password": "osopardo",
+    },
+)
+
+with engine.connect() as conn:
+    conn.execute(sa.text("""
+        CREATE TABLE IF NOT EXISTS comercios (
+            id_comercio     INT,
+            id_bandera      INT,
+            cuit            VARCHAR(20),
+            razon_social    VARCHAR(200),
+            bandera_nombre  VARCHAR(100),
+            bandera_url     VARCHAR(200),
+            ultima_actualizacion DATE,
+            PRIMARY KEY (id_comercio, id_bandera)
+        );
+
+        CREATE TABLE IF NOT EXISTS sucursales (
+            id_comercio     INT,
+            id_bandera      INT,
+            id_sucursal     INT,
+            nombre          VARCHAR(200),
+            tipo            VARCHAR(50),
+            calle           VARCHAR(200),
+            numero          VARCHAR(20),
+            latitud         DECIMAL(10,7),
+            longitud        DECIMAL(10,7),
+            barrio          VARCHAR(100),
+            codigo_postal   VARCHAR(10),
+            localidad       VARCHAR(100),
+            provincia       VARCHAR(50),
+            horarios        JSONB,
+            PRIMARY KEY (id_comercio, id_bandera, id_sucursal),
+            FOREIGN KEY (id_comercio, id_bandera)
+                REFERENCES comercios(id_comercio, id_bandera)
+        );
+
+        CREATE TABLE IF NOT EXISTS productos (
+            id                    BIGSERIAL PRIMARY KEY,
+            ean                   VARCHAR(30),
+            id_comercio           INT,
+            id_producto           VARCHAR(30),
+            descripcion           VARCHAR(300),
+            marca                 VARCHAR(100),
+            cantidad_presentacion DECIMAL(10,3),
+            unidad_medida         VARCHAR(20),
+            cantidad_referencia   DECIMAL(10,3),
+            unidad_referencia     VARCHAR(20),
+            UNIQUE (ean),
+            UNIQUE (id_comercio, id_producto)
+        );
+
+        CREATE TABLE IF NOT EXISTS precios (
+            id                BIGSERIAL PRIMARY KEY,
+            producto_id       BIGINT REFERENCES productos(id),
+            id_comercio       INT,
+            id_bandera        INT,
+            id_sucursal       INT,
+            fecha             DATE NOT NULL,
+            precio_lista      DECIMAL(12,2),
+            precio_promo1     DECIMAL(12,2),
+            leyenda_promo1    VARCHAR(300),
+            precio_promo2     DECIMAL(12,2),
+            leyenda_promo2    VARCHAR(300),
+            precio_referencia DECIMAL(12,2),
+            FOREIGN KEY (id_comercio, id_bandera, id_sucursal)
+                REFERENCES sucursales(id_comercio, id_bandera, id_sucursal)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_precios_producto_fecha
+            ON precios(producto_id, fecha DESC);
+        CREATE INDEX IF NOT EXISTS idx_precios_fecha
+            ON precios(fecha DESC);
+        CREATE INDEX IF NOT EXISTS idx_sucursales_provincia
+            ON sucursales(provincia);
+
+        CREATE TABLE IF NOT EXISTS productos_vtex (
+            ean             VARCHAR(30) PRIMARY KEY,
+            nombre_vtex     VARCHAR(300),
+            marca_vtex      VARCHAR(100),
+            categoria       VARCHAR(200),
+            subcategoria    VARCHAR(100),
+            imagen_url      VARCHAR(500),
+            fuente          VARCHAR(100),
+            enriquecido_en  TIMESTAMP DEFAULT NOW()
+        );
+
+        CREATE OR REPLACE VIEW vista_productos AS
+        SELECT 
+            p.id,
+            p.ean,
+            p.id_comercio,
+            p.id_producto,
+            COALESCE(v.nombre_vtex, p.descripcion)  AS nombre,
+            COALESCE(v.marca_vtex,  p.marca)        AS marca,
+            p.descripcion                           AS descripcion_sepa,
+            p.cantidad_presentacion,
+            p.unidad_medida,
+            v.categoria,
+            v.subcategoria,
+            v.imagen_url
+        FROM productos p
+        LEFT JOIN productos_vtex v 
+            ON p.ean = v.ean 
+            AND v.fuente != 'not_found';
+    """))
+    conn.commit()
+    print("Tablas y vistas creadas correctamente.")
+
