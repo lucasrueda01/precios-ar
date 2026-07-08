@@ -1,20 +1,65 @@
 "use client"
 
 import { useState } from "react"
-import { Search, MapPin, Loader2, ArrowRight, Package } from "lucide-react"
+import { Search, MapPin, Loader2, ArrowRight, Package, Store, Calendar, Tag } from "lucide-react"
 
 // Types matching our backend schema
 interface ProductoBase {
-  id: number;
+  producto_id?: number;
+  id?: number;
   ean?: string;
+  id_comercio?: number;
+  id_producto?: string;
   nombre?: string;
-  descripcion?: string;
   marca?: string;
   cantidad_presentacion?: number;
   unidad_medida?: string;
   categoria?: string;
   subcategoria?: string;
   imagen_url?: string;
+  id_bandera?: number;
+  id_sucursal?: number;
+  bandera_nombre?: string;
+  provincia?: string;
+  localidad?: string;
+  precio_lista?: number | string;
+  precio_promo1?: number | string;
+  leyenda_promo1?: string;
+  precio_promo2?: number | string;
+  leyenda_promo2?: string;
+  precio_fecha?: string;
+}
+
+const PROVINCIAS_MAP: Record<string, string> = {
+  "AR-C": "CABA",
+  "AR-B": "Buenos Aires",
+  "AR-K": "Catamarca",
+  "AR-H": "Chaco",
+  "AR-U": "Chubut",
+  "AR-X": "Córdoba",
+  "AR-W": "Corrientes",
+  "AR-E": "Entre Ríos",
+  "AR-P": "Formosa",
+  "AR-Y": "Jujuy",
+  "AR-L": "La Pampa",
+  "AR-F": "La Rioja",
+  "AR-M": "Mendoza",
+  "AR-N": "Misiones",
+  "AR-Q": "Neuquén",
+  "AR-R": "Río Negro",
+  "AR-A": "Salta",
+  "AR-J": "San Juan",
+  "AR-D": "San Luis",
+  "AR-Z": "Santa Cruz",
+  "AR-S": "Santa Fe",
+  "AR-G": "Santiago del Estero",
+  "AR-V": "Tierra del Fuego",
+  "AR-T": "Tucumán",
+};
+
+function getProvinciaNombre(codigo?: string): string {
+  if (!codigo) return "";
+  return PROVINCIAS_MAP[codigo] || codigo;
 }
 
 export default function Home() {
@@ -198,37 +243,91 @@ export default function Home() {
               <p className="font-medium">Buscando en supermercados de tu zona...</p>
             </div>
           ) : results.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-left">
-              {results.map((prod) => (
-                <div key={prod.id} className="glass p-5 rounded-2xl flex gap-4 items-start hover:bg-white/10 dark:hover:bg-white/5 transition-all cursor-pointer group shadow-sm hover:shadow-md">
-                  <div className="bg-secondary p-2 rounded-xl group-hover:scale-110 transition-transform duration-300 w-16 h-16 flex items-center justify-center shrink-0 overflow-hidden">
-                    {prod.imagen_url ? (
-                      <img src={prod.imagen_url} alt={prod.nombre || prod.descripcion || "Producto"} className="w-full h-full object-contain" />
-                    ) : (
-                      <Package className="w-6 h-6 text-primary" />
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold text-foreground truncate" title={prod.nombre || prod.descripcion}>
-                      {prod.nombre || prod.descripcion || "Producto sin nombre"}
-                    </h3>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      Marca: <span className="font-medium text-foreground">{prod.marca || "-"}</span>
-                    </p>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <span className="inline-flex items-center rounded-md bg-accent px-2 py-1 text-xs font-medium text-accent-foreground">
-                        {prod.cantidad_presentacion} {prod.unidad_medida}
-                      </span>
-                      {prod.subcategoria && (
-                        <span className="inline-flex items-center rounded-md bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
-                          {prod.subcategoria}
+            <div className="flex flex-col gap-3 text-left">
+              {results.map((prod, idx) => {
+                const precioListaNum = Number(prod.precio_lista || 0);
+                const precioPromoNum = Number(prod.precio_promo1 || 0);
+                const hasPromo = precioPromoNum > 0 && precioPromoNum < precioListaNum;
+                const precioMostrar = hasPromo ? precioPromoNum : precioListaNum;
+                
+                return (
+                  <div 
+                    key={`${prod.producto_id || prod.id}-${prod.id_comercio}-${prod.id_sucursal}-${idx}`} 
+                    className="glass p-4 sm:p-5 rounded-2xl flex flex-col sm:flex-row gap-4 sm:items-center justify-between hover:bg-white/10 dark:hover:bg-white/5 transition-all duration-300 cursor-pointer group shadow-sm hover:shadow-md border border-border/40 hover:border-primary/40"
+                  >
+                    <div className="flex gap-4 items-start flex-1 min-w-0">
+                      <div className="bg-secondary p-2.5 rounded-xl group-hover:scale-105 transition-transform duration-300 w-16 h-16 sm:w-20 sm:h-20 flex items-center justify-center shrink-0 overflow-hidden shadow-inner">
+                        {prod.imagen_url ? (
+                          <img src={prod.imagen_url} alt={prod.nombre || "Producto"} className="w-full h-full object-contain" />
+                        ) : (
+                          <Package className="w-7 h-7 text-primary/60" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0 space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          {prod.bandera_nombre && (
+                            <span className="inline-flex items-center gap-1 rounded-md bg-primary/15 px-2 py-0.5 text-xs font-bold text-primary">
+                              <Store className="w-3.5 h-3.5 shrink-0" />
+                              {prod.bandera_nombre}
+                            </span>
+                          )}
+                          {(prod.localidad || prod.provincia) && (
+                            <span className="text-xs text-muted-foreground font-medium truncate max-w-[200px]" title={prod.localidad || getProvinciaNombre(prod.provincia)}>
+                              📍 {prod.localidad || getProvinciaNombre(prod.provincia)}
+                            </span>
+                          )}
+                        </div>
+                        <h3 className="font-bold text-foreground text-base sm:text-lg truncate group-hover:text-primary transition-colors" title={prod.nombre}>
+                          {prod.nombre || "Producto sin nombre"}
+                        </h3>
+                        <p className="text-xs sm:text-sm text-muted-foreground">
+                          Marca: <span className="font-semibold text-foreground/80">{prod.marca || "-"}</span>
+                        </p>
+                        <div className="pt-1 flex flex-wrap gap-1.5">
+                          {prod.cantidad_presentacion && (
+                            <span className="inline-flex items-center rounded-md bg-secondary px-2 py-0.5 text-[11px] font-medium text-secondary-foreground">
+                              {prod.cantidad_presentacion} {prod.unidad_medida}
+                            </span>
+                          )}
+                          {prod.subcategoria && (
+                            <span className="inline-flex items-center rounded-md bg-accent/50 px-2 py-0.5 text-[11px] font-medium text-accent-foreground">
+                              {prod.subcategoria}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Sección de Precio */}
+                    <div className="flex sm:flex-col items-center sm:items-end justify-between sm:justify-center border-t sm:border-t-0 pt-3 sm:pt-0 border-border/50 shrink-0 gap-1 sm:pl-4 sm:border-l sm:border-border/30 sm:min-w-[160px]">
+                      {hasPromo && prod.leyenda_promo1 && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-0.5 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 mb-0.5">
+                          <Tag className="w-3 h-3" />
+                          {prod.leyenda_promo1}
+                        </span>
+                      )}
+                      
+                      <div className="flex items-baseline gap-2">
+                        {hasPromo && precioListaNum > 0 && (
+                          <span className="text-xs sm:text-sm font-semibold text-muted-foreground line-through decoration-red-500/70">
+                            ${precioListaNum.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                        )}
+                        <span className={`text-2xl sm:text-3xl font-black tracking-tight ${hasPromo ? 'text-emerald-600 dark:text-emerald-400' : 'text-foreground'}`}>
+                          ${precioMostrar > 0 ? precioMostrar.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "-.--"}
+                        </span>
+                      </div>
+
+                      {prod.precio_fecha && (
+                        <span className="text-[11px] text-muted-foreground/80 flex items-center gap-1 mt-0.5 font-medium">
+                          <Calendar className="w-3 h-3 opacity-70" />
+                          Act: {new Date(prod.precio_fecha + 'T00:00:00').toLocaleDateString("es-AR", { day: '2-digit', month: 'short', year: 'numeric' })}
                         </span>
                       )}
                     </div>
                   </div>
-                  <ArrowRight className="w-5 h-5 text-muted-foreground opacity-0 -translate-x-4 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300 self-center" />
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div className="glass p-8 rounded-2xl flex flex-col items-center justify-center gap-3 text-muted-foreground text-center">

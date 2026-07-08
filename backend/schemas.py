@@ -19,13 +19,13 @@ class PrecioBase(BaseModel):
         from_attributes = True
 
 class ProductoBase(BaseModel):
-    id: int
+    producto_id: int
+    id: Optional[int] = None
     ean: Optional[str] = None
     id_comercio: Optional[int] = None
     id_producto: Optional[str] = None
     nombre: Optional[str] = None
     descripcion: Optional[str] = None
-    descripcion_sepa: Optional[str] = None
     marca: Optional[str] = None
     cantidad_presentacion: Optional[Decimal] = None
     unidad_medida: Optional[str] = None
@@ -34,6 +34,17 @@ class ProductoBase(BaseModel):
     categoria: Optional[str] = None
     subcategoria: Optional[str] = None
     imagen_url: Optional[str] = None
+    id_bandera: Optional[int] = None
+    id_sucursal: Optional[int] = None
+    bandera_nombre: Optional[str] = None
+    provincia: Optional[str] = None
+    localidad: Optional[str] = None
+    precio_lista: Optional[Decimal] = None
+    precio_promo1: Optional[Decimal] = None
+    leyenda_promo1: Optional[str] = None
+    precio_promo2: Optional[Decimal] = None
+    leyenda_promo2: Optional[str] = None
+    precio_fecha: Optional[date] = None
 
     class Config:
         from_attributes = True

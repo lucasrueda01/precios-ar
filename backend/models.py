@@ -61,20 +61,31 @@ class Producto(Base):
 class VistaProducto(Base):
     __tablename__ = "vista_productos"
 
-    id = Column(BigInteger, primary_key=True, index=True)
+    producto_id = Column(BigInteger, primary_key=True, index=True)
     ean = Column(String(30))
-    id_comercio = Column(Integer)
+    id_comercio = Column(Integer, primary_key=True)
     id_producto = Column(String(30))
     nombre = Column(String(300))
     marca = Column(String(100))
-    descripcion_sepa = Column(String(300))
     cantidad_presentacion = Column(Numeric(10, 3))
     unidad_medida = Column(String(20))
     categoria = Column(String(200))
     subcategoria = Column(String(100))
     imagen_url = Column(String(500))
+    bandera_nombre = Column(String(100), primary_key=True)
+    provincia = Column(String(50), primary_key=True)
+    precio_lista = Column(Numeric(12, 2))
+    precio_promo1 = Column(Numeric(12, 2))
+    leyenda_promo1 = Column(String(300))
+    precio_promo2 = Column(Numeric(12, 2))
+    leyenda_promo2 = Column(String(300))
+    precio_fecha = Column(Date)
 
-    precios = relationship("Precio", primaryjoin="VistaProducto.id == foreign(Precio.producto_id)", viewonly=True)
+    precios = relationship("Precio", primaryjoin="VistaProducto.producto_id == foreign(Precio.producto_id)", viewonly=True)
+
+    @property
+    def id(self):
+        return self.producto_id
 
     @property
     def descripcion(self):

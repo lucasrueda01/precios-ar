@@ -94,24 +94,44 @@ with engine.connect() as conn:
             enriquecido_en  TIMESTAMP DEFAULT NOW()
         );
 
+        DROP VIEW IF EXISTS vista_productos CASCADE;
         CREATE OR REPLACE VIEW vista_productos AS
         SELECT 
-            p.id,
+            p.id                                        AS producto_id,
             p.ean,
             p.id_comercio,
             p.id_producto,
-            COALESCE(v.nombre_vtex, p.descripcion)  AS nombre,
-            COALESCE(v.marca_vtex,  p.marca)        AS marca,
-            p.descripcion                           AS descripcion_sepa,
+            COALESCE(v.nombre_vtex, p.descripcion)      AS nombre,
+            COALESCE(v.marca_vtex,  p.marca)            AS marca,
             p.cantidad_presentacion,
             p.unidad_medida,
             v.categoria,
             v.subcategoria,
-            v.imagen_url
+            v.imagen_url,
+            c.bandera_nombre,
+            su.provincia,
+            MIN(pa.precio_lista::decimal)               AS precio_lista,
+            MIN(pa.precio_promo1::decimal)              AS precio_promo1,
+            MAX(pa.leyenda_promo1)                      AS leyenda_promo1,
+            MIN(pa.precio_promo2::decimal)              AS precio_promo2,
+            MAX(pa.leyenda_promo2)                      AS leyenda_promo2,
+            MAX(pa.fecha)                               AS precio_fecha
         FROM productos p
-        LEFT JOIN productos_vtex v 
-            ON p.ean = v.ean 
-            AND v.fuente != 'not_found';
+        JOIN precios_actuales pa  ON p.id = pa.producto_id
+        JOIN comercios c          ON pa.id_comercio = c.id_comercio
+                                 AND pa.id_bandera  = c.id_bandera
+        JOIN sucursales su        ON pa.id_comercio = su.id_comercio
+                                 AND pa.id_bandera  = su.id_bandera
+                                 AND pa.id_sucursal = su.id_sucursal
+        LEFT JOIN productos_vtex v ON p.ean = v.ean
+                                   AND v.fuente != 'not_found'
+        GROUP BY
+            p.id, p.ean, p.id_comercio, p.id_producto,
+            v.nombre_vtex, p.descripcion,
+            v.marca_vtex, p.marca,
+            p.cantidad_presentacion, p.unidad_medida,
+            v.categoria, v.subcategoria, v.imagen_url,
+            c.bandera_nombre, su.provincia;
     """))
     conn.commit()
     print("Tablas y vistas creadas correctamente.")
