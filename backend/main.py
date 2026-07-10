@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import desc, or_, case
+from sqlalchemy import desc, or_, case, func
 from typing import List, Optional
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -26,8 +26,12 @@ def search_productos(
     db: Session = Depends(get_db),
     limit: int = Query(50, le=100),
 ):
+    text_col = func.coalesce(models.VistaProducto.nombre, '') + ' ' + func.coalesce(models.VistaProducto.marca, '')
     query = db.query(models.VistaProducto).filter(
-        models.VistaProducto.nombre.ilike(f"%{q}%")
+        or_(
+            func.to_tsvector('spanish', text_col).op('@@')(func.plainto_tsquery('spanish', q)),
+            models.VistaProducto.ean == q,
+        )
     )
 
     if provincia:
