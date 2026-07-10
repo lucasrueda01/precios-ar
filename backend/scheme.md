@@ -115,6 +115,8 @@ CREATE TABLE public.productos (
     CONSTRAINT productos_ean_key UNIQUE (ean),
     CONSTRAINT productos_id_comercio_id_producto_key UNIQUE (id_comercio, id_producto)
 );
+
+CREATE INDEX idx_productos_fts ON public.productos USING gin (to_tsvector('spanish'::regconfig, descripcion::text));
 ```
 
 | Campo | Tipo | Nullable | Descripción |
@@ -131,7 +133,9 @@ CREATE TABLE public.productos (
 | `unidad_referencia` | varchar(20) | NULL | Unidad del precio de referencia. Ej: "gr", "l", "kg" |
 
 **PK:** `(id)`  
-**UNIQUE:** `(ean)` y `(id_comercio, id_producto)`
+**UNIQUE:** `(ean)` y `(id_comercio, id_producto)`  
+**Índices:**
+- `idx_productos_fts` en `gin(to_tsvector('spanish', descripcion))` — búsqueda full-text optimizada sobre la descripción del producto en español
 
 **Dato clave del SEPA:** En el CSV original, `productos_ean` no es el código de barras sino un **flag**: vale `1` si `id_producto` contiene un EAN real, o `0` si es un código interno del comercio. El script de ingesta interpreta esto correctamente y guarda el EAN real en el campo `ean` solo cuando el flag es `1`.
 
@@ -269,6 +273,7 @@ SELECT
     p.ean,
     p.id_comercio,
     p.id_producto,
+    p.descripcion,
     COALESCE(v.nombre_vtex, p.descripcion)      AS nombre,
     COALESCE(v.marca_vtex,  p.marca)            AS marca,
     p.cantidad_presentacion,
@@ -308,6 +313,7 @@ GROUP BY
 | `ean` | productos | Código de barras si existe, NULL si no |
 | `id_comercio` | productos | ID del comercio dueño del producto |
 | `id_producto` | productos | Código interno del producto en el comercio |
+| `descripcion` | productos | Descripción original en SEPA para búsqueda full-text optimizada |
 | `nombre` | VTEX si existe, SEPA si no | Nombre legible para mostrar al usuario |
 | `marca` | VTEX si existe, SEPA si no | Marca con capitalización correcta |
 | `cantidad_presentacion` | productos (SEPA) | Siempre del SEPA — fuente de verdad |

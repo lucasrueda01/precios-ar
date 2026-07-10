@@ -65,6 +65,7 @@ class VistaProducto(Base):
     ean = Column(String(30))
     id_comercio = Column(Integer, primary_key=True)
     id_producto = Column(String(30))
+    descripcion = Column(String(300))
     nombre = Column(String(300))
     marca = Column(String(100))
     cantidad_presentacion = Column(Numeric(10, 3))
@@ -86,10 +87,6 @@ class VistaProducto(Base):
     @property
     def id(self):
         return self.producto_id
-
-    @property
-    def descripcion(self):
-        return self.nombre
 
 class Precio(Base):
     __tablename__ = "precios"

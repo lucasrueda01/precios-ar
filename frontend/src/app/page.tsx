@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Search, MapPin, Loader2, ArrowRight, Package, Store, Calendar, Tag } from "lucide-react"
+import { Search, MapPin, Loader2, ArrowRight, Package, Store, Calendar, Tag, ArrowUpDown, X, FilterX } from "lucide-react"
 
 // Types matching our backend schema
 interface ProductoBase {
@@ -12,7 +12,7 @@ interface ProductoBase {
   id_producto?: string;
   nombre?: string;
   marca?: string;
-  cantidad_presentacion?: number;
+  cantidad_presentacion?: number | string;
   unidad_medida?: string;
   categoria?: string;
   subcategoria?: string;
@@ -62,39 +62,85 @@ function getProvinciaNombre(codigo?: string): string {
   return PROVINCIAS_MAP[codigo] || codigo;
 }
 
+function formatCantidad(cantidad?: number | string): string {
+  if (cantidad === undefined || cantidad === null || cantidad === "") return "";
+  const num = typeof cantidad === "string" ? Number(cantidad.replace(",", ".")) : Number(cantidad);
+  if (isNaN(num)) return String(cantidad);
+  return num.toLocaleString("es-AR", { maximumFractionDigits: 3 });
+}
+
+function formatUnidad(unidad?: string): string {
+  if (!unidad) return "";
+  const u = unidad.trim().toLowerCase();
+  const mapa: Record<string, string> = {
+    gr: "gr",
+    grs: "gr",
+    g: "gr",
+    lt: "lt",
+    lts: "lt",
+    l: "lt",
+    cc: "cc",
+    ml: "ml",
+    kg: "kg",
+    kgs: "kg",
+    un: "un",
+    u: "un",
+    und: "un",
+    unidades: "un",
+  };
+  return mapa[u] || u;
+}
+
 export default function Home() {
   const [query, setQuery] = useState("")
   const [province, setProvince] = useState<string>("AR-C") // CABA por defecto
+  const [orden, setOrden] = useState<string>("relevancia")
   const [locating, setLocating] = useState(false)
 
   const [loading, setLoading] = useState(false)
   const [results, setResults] = useState<ProductoBase[]>([])
   const [hasSearched, setHasSearched] = useState(false)
 
-  const handleSearch = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!query.trim()) return
-
-    setLoading(true)
-    setHasSearched(true)
+  const fetchResults = async (searchQuery: string, searchProv: string, searchOrden: string) => {
+    if (!searchQuery.trim()) return;
+    setLoading(true);
+    setHasSearched(true);
 
     try {
-      // Llamada al backend FastAPI
-      let url = `http://localhost:8000/api/productos/search?q=${encodeURIComponent(query)}`
-      if (province) {
-        url += `&provincia=${province}`
+      let url = `http://localhost:8000/api/productos/search?q=${encodeURIComponent(searchQuery)}&orden=${searchOrden}`;
+      if (searchProv) {
+        url += `&provincia=${searchProv}`;
       }
-      const res = await fetch(url)
-      if (!res.ok) throw new Error("Error en la búsqueda")
-      const data = await res.json()
-      setResults(data)
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("Error en la búsqueda");
+      const data = await res.json();
+      setResults(data);
     } catch (error) {
-      console.error(error)
-      setResults([])
+      console.error(error);
+      setResults([]);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    fetchResults(query, province, orden);
+  };
+
+  const handleOrdenChange = (newOrden: string) => {
+    setOrden(newOrden);
+    if (hasSearched && query.trim()) {
+      fetchResults(query, province, newOrden);
+    }
+  };
+
+  const handleClearFilter = () => {
+    setQuery("");
+    setOrden("relevancia");
+    setHasSearched(false);
+    setResults([]);
+  };
 
   const handleLocate = () => {
     setLocating(true)
@@ -155,8 +201,18 @@ export default function Home() {
                 placeholder="Ej. Leche entera, yerba mate..."
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                className="w-full h-14 pl-12 pr-4 rounded-xl bg-transparent border-none outline-none focus:ring-2 focus:ring-primary text-lg transition-all"
+                className="w-full h-14 pl-12 pr-10 rounded-xl bg-transparent border-none outline-none focus:ring-2 focus:ring-primary text-lg transition-all"
               />
+              {query && (
+                <button
+                  type="button"
+                  onClick={() => setQuery("")}
+                  className="absolute right-3.5 p-1 rounded-full hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
+                  title="Borrar texto"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
             </div>
 
             <div className="h-14 sm:w-[1px] bg-border/50 hidden sm:block" />
@@ -236,7 +292,50 @@ export default function Home() {
 
       {/* Resultados de búsqueda */}
       {hasSearched && (
-        <div className="w-full max-w-4xl mx-auto mt-12 mb-12 animate-in fade-in slide-in-from-bottom-8 duration-500">
+        <div className="w-full max-w-4xl mx-auto mt-8 mb-12 animate-in fade-in slide-in-from-bottom-8 duration-500">
+          {/* Barra de control de filtros y ordenamiento */}
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-6 bg-secondary/40 backdrop-blur-md p-3 px-4 rounded-2xl border border-border/40">
+            <div className="text-sm font-medium text-muted-foreground">
+              {loading ? (
+                <span>Buscando resultados...</span>
+              ) : (
+                <span>
+                  <strong className="text-foreground">{results.length}</strong> resultados para <span className="text-foreground font-semibold">&ldquo;{query}&rdquo;</span>
+                </span>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2.5">
+              {/* Ordenar por */}
+              <div className="flex items-center gap-2 bg-background/80 px-3 py-1.5 rounded-xl border border-border/50 text-sm">
+                <ArrowUpDown className="w-4 h-4 text-primary shrink-0" />
+                <span className="text-muted-foreground hidden sm:inline">Ordenar:</span>
+                <select
+                  value={orden}
+                  onChange={(e) => handleOrdenChange(e.target.value)}
+                  disabled={loading}
+                  className="bg-transparent font-semibold text-foreground outline-none cursor-pointer text-sm"
+                >
+                  <option value="relevancia">⚡ Relevancia</option>
+                  <option value="precio_asc">💵 Menor precio</option>
+                  <option value="precio_desc">💰 Mayor precio</option>
+                  <option value="alfa_asc">🔤 Alfabético (A-Z)</option>
+                </select>
+              </div>
+
+              {/* Botón limpiar */}
+              <button
+                type="button"
+                onClick={handleClearFilter}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-600 dark:text-red-400 font-semibold text-sm transition-colors border border-red-500/20"
+                title="Limpiar búsqueda y filtros"
+              >
+                <FilterX className="w-4 h-4" />
+                <span>Limpiar</span>
+              </button>
+            </div>
+          </div>
+
           {loading ? (
             <div className="flex flex-col items-center justify-center p-12 text-muted-foreground gap-4">
               <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -284,9 +383,9 @@ export default function Home() {
                           Marca: <span className="font-semibold text-foreground/80">{prod.marca || "-"}</span>
                         </p>
                         <div className="pt-1 flex flex-wrap gap-1.5">
-                          {prod.cantidad_presentacion && (
+                          {prod.cantidad_presentacion !== undefined && prod.cantidad_presentacion !== null && prod.cantidad_presentacion !== "" && (
                             <span className="inline-flex items-center rounded-md bg-secondary px-2 py-0.5 text-[11px] font-medium text-secondary-foreground">
-                              {prod.cantidad_presentacion} {prod.unidad_medida}
+                              {formatCantidad(prod.cantidad_presentacion)} {formatUnidad(prod.unidad_medida)}
                             </span>
                           )}
                           {prod.subcategoria && (

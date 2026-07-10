@@ -82,6 +82,8 @@ with engine.connect() as conn:
             ON precios(fecha DESC);
         CREATE INDEX IF NOT EXISTS idx_sucursales_provincia
             ON sucursales(provincia);
+        CREATE INDEX IF NOT EXISTS idx_productos_fts
+            ON productos USING gin(to_tsvector('spanish', descripcion));
 
         CREATE TABLE IF NOT EXISTS productos_vtex (
             ean             VARCHAR(30) PRIMARY KEY,
@@ -101,6 +103,7 @@ with engine.connect() as conn:
             p.ean,
             p.id_comercio,
             p.id_producto,
+            p.descripcion,
             COALESCE(v.nombre_vtex, p.descripcion)      AS nombre,
             COALESCE(v.marca_vtex,  p.marca)            AS marca,
             p.cantidad_presentacion,
