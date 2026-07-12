@@ -359,20 +359,7 @@ def procesar_precios(df, conn, id_map):
     print(f"    precios: {insertados}/{total} filas insertadas ({pct}% cambiaron)")
 
 
-def crear_o_refrescar_vista(conn):
-    conn.execute(sa.text("""
-        CREATE MATERIALIZED VIEW IF NOT EXISTS precios_actuales AS
-        SELECT DISTINCT ON (producto_id, id_comercio, id_bandera, id_sucursal)
-            producto_id, id_comercio, id_bandera, id_sucursal,
-            fecha, precio_lista, precio_promo1, leyenda_promo1,
-            precio_promo2, leyenda_promo2, precio_referencia
-        FROM precios
-        ORDER BY producto_id, id_comercio, id_bandera, id_sucursal, fecha DESC
-    """))
-    conn.execute(sa.text("""
-        CREATE INDEX IF NOT EXISTS idx_precios_actuales_producto
-        ON precios_actuales(producto_id)
-    """))
+def refrescar_vista(conn):
     conn.execute(sa.text("REFRESH MATERIALIZED VIEW precios_actuales"))
     print("  Vista precios_actuales refrescada.")
 
@@ -414,6 +401,6 @@ if __name__ == "__main__":
 
     print("\nRefrescando vista de precios actuales...")
     with engine.begin() as conn:
-        crear_o_refrescar_vista(conn)
+        refrescar_vista(conn)
 
     print("\nIngesta completada.")

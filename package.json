@@ -4,10 +4,14 @@
   "private": true,
   "description": "PrecioAR - Buscador y comparador de precios de supermercados en Argentina (SEPA)",
   "scripts": {
+    "dev": "concurrently -n \"BACK,FRONT\" -c \"blue,green\" \"npm run dev:backend\" \"npm run dev:frontend\"",
     "dev:frontend": "npm run dev --prefix frontend",
     "dev:backend": "uvicorn backend.main:app --reload",
     "build:frontend": "npm run build --prefix frontend",
     "lint:frontend": "npm run lint --prefix frontend"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0"
   },
   "keywords": [
     "precioar",

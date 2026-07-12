@@ -96,6 +96,18 @@ with engine.connect() as conn:
             enriquecido_en  TIMESTAMP DEFAULT NOW()
         );
 
+        CREATE MATERIALIZED VIEW IF NOT EXISTS precios_actuales AS
+        SELECT DISTINCT ON (producto_id, id_comercio, id_bandera, id_sucursal)
+            producto_id, id_comercio, id_bandera, id_sucursal,
+            fecha, precio_lista, precio_promo1, leyenda_promo1,
+            precio_promo2, leyenda_promo2, precio_referencia
+        FROM precios
+        ORDER BY producto_id, id_comercio, id_bandera, id_sucursal, fecha DESC
+        WITH NO DATA;
+
+        CREATE INDEX IF NOT EXISTS idx_precios_actuales_producto
+            ON precios_actuales(producto_id);
+
         DROP VIEW IF EXISTS vista_productos CASCADE;
         CREATE OR REPLACE VIEW vista_productos AS
         SELECT 

@@ -241,24 +241,25 @@ CREATE INDEX idx_precios_fecha ON public.precios USING btree (fecha DESC);
 
 ### `precios_actuales` (MATERIALIZED VIEW)
 
-Foto del **último precio registrado** de cada producto en cada sucursal. Se refresca automáticamente al finalizar cada ingesta diaria con `REFRESH MATERIALIZED VIEW`.
+Foto del **último precio registrado** de cada producto en cada sucursal. Su estructura se define en `setup_db.py` (`WITH NO DATA`) antes de crear `vista_productos`, y los datos se refrescan automáticamente al finalizar cada ingesta diaria en `ingest.py` con `REFRESH MATERIALIZED VIEW`.
 
 ```sql
-CREATE MATERIALIZED VIEW public.precios_actuales AS
+CREATE MATERIALIZED VIEW IF NOT EXISTS public.precios_actuales AS
 SELECT DISTINCT ON (producto_id, id_comercio, id_bandera, id_sucursal)
     producto_id, id_comercio, id_bandera, id_sucursal,
     fecha, precio_lista, precio_promo1, leyenda_promo1,
     precio_promo2, leyenda_promo2, precio_referencia
 FROM public.precios
-ORDER BY producto_id, id_comercio, id_bandera, id_sucursal, fecha DESC;
+ORDER BY producto_id, id_comercio, id_bandera, id_sucursal, fecha DESC
+WITH NO DATA;
 
-CREATE INDEX idx_precios_actuales_producto
+CREATE INDEX IF NOT EXISTS idx_precios_actuales_producto
     ON public.precios_actuales USING btree (producto_id);
 ```
 
 Contiene los mismos campos que `precios` pero solo una fila por combinación `(producto_id, id_comercio, id_bandera, id_sucursal)`, correspondiente al registro más reciente.
 
-La API usa esta vista para las búsquedas — es mucho más rápida que recorrer el historial completo.
+La API usa esta vista para las búsquedas — es mucho más rápida que recorrer el historial completo. El DDL (`CREATE MATERIALIZED VIEW ... WITH NO DATA` + `CREATE INDEX`) vive en `setup_db.py` y el mantenimiento de datos (`REFRESH MATERIALIZED VIEW`) en `ingest.py`.
 
 ---
 
