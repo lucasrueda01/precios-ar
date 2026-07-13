@@ -1,7 +1,7 @@
 "use client"
 
-import { useState } from "react"
-import { Search, MapPin, Loader2, ArrowRight, Package, Store, Calendar, Tag, ArrowUpDown, X, FilterX } from "lucide-react"
+import { useState, useEffect, useRef } from "react"
+import { Search, MapPin, Loader2, ArrowRight, Package, Store, Calendar, Tag, ArrowUpDown, X, FilterX, ChevronDown, Check, Navigation } from "lucide-react"
 
 // Types matching our backend schema
 interface ProductoBase {
@@ -91,11 +91,88 @@ function formatUnidad(unidad?: string): string {
   return mapa[u] || u;
 }
 
+function formatNombreProducto(nombre?: string): string {
+  if (!nombre) return "";
+  const minusculas = new Set([
+    "a", "al", "con", "de", "del", "e", "en", "o", "para", "por", "sin", "u", "y"
+  ]);
+  const unidades = new Set([
+    "gr", "grs", "g", "kg", "kgs", "lt", "lts", "l", "ml", "cc", "un", "u", "cm3"
+  ]);
+
+  const words = nombre.trim().toLowerCase().split(/\s+/);
+  return words
+    .map((word, index) => {
+      if (!word) return "";
+      if (index > 0 && minusculas.has(word)) {
+        return word;
+      }
+      if (index > 0 && unidades.has(word) && /^\d/.test(words[index - 1] || "")) {
+        return word;
+      }
+      return word.charAt(0).toUpperCase() + word.slice(1);
+    })
+    .join(" ");
+}
+
+const PROVINCES_LIST = [
+  { value: "", label: "Todo el país" },
+  { value: "auto", label: "Ubicación actual", isSpecial: true },
+  { value: "AR-C", label: "CABA" },
+  { value: "AR-B", label: "Buenos Aires" },
+  { value: "AR-K", label: "Catamarca" },
+  { value: "AR-H", label: "Chaco" },
+  { value: "AR-U", label: "Chubut" },
+  { value: "AR-X", label: "Córdoba" },
+  { value: "AR-W", label: "Corrientes" },
+  { value: "AR-E", label: "Entre Ríos" },
+  { value: "AR-P", label: "Formosa" },
+  { value: "AR-Y", label: "Jujuy" },
+  { value: "AR-L", label: "La Pampa" },
+  { value: "AR-F", label: "La Rioja" },
+  { value: "AR-M", label: "Mendoza" },
+  { value: "AR-N", label: "Misiones" },
+  { value: "AR-Q", label: "Neuquén" },
+  { value: "AR-R", label: "Río Negro" },
+  { value: "AR-A", label: "Salta" },
+  { value: "AR-J", label: "San Juan" },
+  { value: "AR-D", label: "San Luis" },
+  { value: "AR-Z", label: "Santa Cruz" },
+  { value: "AR-S", label: "Santa Fe" },
+  { value: "AR-G", label: "Santiago del Estero" },
+  { value: "AR-V", label: "Tierra del Fuego" },
+  { value: "AR-T", label: "Tucumán" },
+];
+
+const ORDEN_LIST = [
+  { value: "relevancia", label: "Relevancia" },
+  { value: "precio_asc", label: "Menor precio" },
+  { value: "precio_desc", label: "Mayor precio" },
+  { value: "alfa_asc", label: "Alfabético (A-Z)" },
+];
+
 export default function Home() {
   const [query, setQuery] = useState("")
   const [province, setProvince] = useState<string>("AR-C") // CABA por defecto
   const [orden, setOrden] = useState<string>("relevancia")
   const [locating, setLocating] = useState(false)
+  const [openProvince, setOpenProvince] = useState(false)
+  const [openOrden, setOpenOrden] = useState(false)
+  const provinceDropdownRef = useRef<HTMLDivElement>(null)
+  const ordenDropdownRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (provinceDropdownRef.current && !provinceDropdownRef.current.contains(event.target as Node)) {
+        setOpenProvince(false);
+      }
+      if (ordenDropdownRef.current && !ordenDropdownRef.current.contains(event.target as Node)) {
+        setOpenOrden(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const [loading, setLoading] = useState(false)
   const [results, setResults] = useState<ProductoBase[]>([])
@@ -217,55 +294,62 @@ export default function Home() {
 
             <div className="h-14 sm:w-[1px] bg-border/50 hidden sm:block" />
 
-            <div className="relative flex items-center min-w-[150px] bg-secondary/50 hover:bg-secondary rounded-xl transition-colors">
-              <MapPin className="absolute left-3 w-4 h-4 text-primary pointer-events-none" />
-              {locating ? (
-                <div className="flex items-center pl-9 pr-4 h-14 w-full">
-                  <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                </div>
-              ) : (
-                <select
-                  value={province}
-                  onChange={(e) => {
-                    if (e.target.value === "auto") {
-                      handleLocate();
-                    } else {
-                      setProvince(e.target.value);
-                    }
-                  }}
-                  className="w-full h-14 pl-9 pr-8 appearance-none bg-transparent border-none outline-none focus:ring-2 focus:ring-primary text-sm font-medium cursor-pointer"
-                >
-                  <option value="">Todo el país</option>
-                  <option value="auto">Ubicación actual</option>
-                  <option value="AR-C">CABA</option>
-                  <option value="AR-B">Buenos Aires</option>
-                  <option value="AR-K">Catamarca</option>
-                  <option value="AR-H">Chaco</option>
-                  <option value="AR-U">Chubut</option>
-                  <option value="AR-X">Córdoba</option>
-                  <option value="AR-W">Corrientes</option>
-                  <option value="AR-E">Entre Ríos</option>
-                  <option value="AR-P">Formosa</option>
-                  <option value="AR-Y">Jujuy</option>
-                  <option value="AR-L">La Pampa</option>
-                  <option value="AR-F">La Rioja</option>
-                  <option value="AR-M">Mendoza</option>
-                  <option value="AR-N">Misiones</option>
-                  <option value="AR-Q">Neuquén</option>
-                  <option value="AR-R">Río Negro</option>
-                  <option value="AR-A">Salta</option>
-                  <option value="AR-J">San Juan</option>
-                  <option value="AR-D">San Luis</option>
-                  <option value="AR-Z">Santa Cruz</option>
-                  <option value="AR-S">Santa Fe</option>
-                  <option value="AR-G">Sgo. del Estero</option>
-                  <option value="AR-V">Tierra del Fuego</option>
-                  <option value="AR-T">Tucumán</option>
-                </select>
-              )}
-              {!locating && (
-                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+            <div ref={provinceDropdownRef} className="relative min-w-[170px]">
+              <button
+                type="button"
+                onClick={() => setOpenProvince(!openProvince)}
+                disabled={locating}
+                className="w-full h-14 pl-10 pr-8 bg-secondary/50 hover:bg-secondary text-foreground rounded-xl flex items-center justify-between gap-2 text-sm font-medium transition-all duration-200 border border-transparent focus:border-primary/50 outline-none"
+              >
+                <MapPin className="absolute left-3.5 w-4 h-4 text-primary pointer-events-none" />
+                <span className="truncate">
+                  {locating
+                    ? "Ubicando..."
+                    : province === ""
+                    ? "Todo el país"
+                    : PROVINCIAS_MAP[province] || "Seleccionar provincia"}
+                </span>
+                {locating ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-primary shrink-0" />
+                ) : (
+                  <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform duration-200 shrink-0 ${openProvince ? "rotate-180" : ""}`} />
+                )}
+              </button>
+
+              {openProvince && (
+                <div className="absolute right-0 sm:left-0 top-[calc(100%+8px)] z-50 w-64 max-h-80 overflow-y-auto rounded-2xl bg-background/95 dark:bg-zinc-900/95 backdrop-blur-xl border border-border/80 shadow-2xl p-1.5 animate-in fade-in slide-in-from-top-2 duration-200">
+                  <div className="space-y-0.5">
+                    {PROVINCES_LIST.map((item) => {
+                      const isSelected = province === item.value;
+                      return (
+                        <button
+                          key={item.value}
+                          type="button"
+                          onClick={() => {
+                            setOpenProvince(false);
+                            if (item.value === "auto") {
+                              handleLocate();
+                            } else {
+                              setProvince(item.value);
+                            }
+                          }}
+                          className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium transition-colors text-left ${
+                            isSelected
+                              ? "bg-primary/15 text-primary font-semibold"
+                              : item.isSpecial
+                              ? "text-primary hover:bg-primary/10"
+                              : "text-foreground hover:bg-secondary"
+                          }`}
+                        >
+                          <span className="flex items-center gap-2">
+                            {item.isSpecial && <Navigation className="w-3.5 h-3.5 text-primary shrink-0" />}
+                            {item.label}
+                          </span>
+                          {isSelected && <Check className="w-4 h-4 text-primary shrink-0" />}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
             </div>
@@ -307,20 +391,48 @@ export default function Home() {
 
             <div className="flex flex-wrap items-center gap-2.5">
               {/* Ordenar por */}
-              <div className="flex items-center gap-2 bg-background/80 px-3 py-1.5 rounded-xl border border-border/50 text-sm">
-                <ArrowUpDown className="w-4 h-4 text-primary shrink-0" />
-                <span className="text-muted-foreground hidden sm:inline">Ordenar:</span>
-                <select
-                  value={orden}
-                  onChange={(e) => handleOrdenChange(e.target.value)}
+              <div ref={ordenDropdownRef} className="relative">
+                <button
+                  type="button"
+                  onClick={() => setOpenOrden(!openOrden)}
                   disabled={loading}
-                  className="bg-transparent font-semibold text-foreground outline-none cursor-pointer text-sm"
+                  className="flex items-center gap-2 bg-background/90 hover:bg-background dark:bg-zinc-900/90 dark:hover:bg-zinc-900 px-3.5 py-2 rounded-xl border border-border/60 text-sm font-semibold text-foreground transition-all duration-200 shadow-sm"
                 >
-                  <option value="relevancia">Relevancia</option>
-                  <option value="precio_asc">Menor precio</option>
-                  <option value="precio_desc">Mayor precio</option>
-                  <option value="alfa_asc">Alfabético (A-Z)</option>
-                </select>
+                  <ArrowUpDown className="w-4 h-4 text-primary shrink-0" />
+                  <span className="text-muted-foreground font-normal hidden sm:inline">Ordenar:</span>
+                  <span>
+                    {ORDEN_LIST.find((o) => o.value === orden)?.label || "Relevancia"}
+                  </span>
+                  <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground transition-transform duration-200 ${openOrden ? "rotate-180" : ""}`} />
+                </button>
+
+                {openOrden && (
+                  <div className="absolute right-0 top-[calc(100%+6px)] z-50 w-48 rounded-2xl bg-background/95 dark:bg-zinc-900/95 backdrop-blur-xl border border-border/80 shadow-2xl p-1.5 animate-in fade-in slide-in-from-top-2 duration-200">
+                    <div className="space-y-0.5">
+                      {ORDEN_LIST.map((item) => {
+                        const isSelected = orden === item.value;
+                        return (
+                          <button
+                            key={item.value}
+                            type="button"
+                            onClick={() => {
+                              setOpenOrden(false);
+                              handleOrdenChange(item.value);
+                            }}
+                            className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm font-medium transition-colors text-left ${
+                              isSelected
+                                ? "bg-primary/15 text-primary font-semibold"
+                                : "text-foreground hover:bg-secondary"
+                            }`}
+                          >
+                            <span>{item.label}</span>
+                            {isSelected && <Check className="w-4 h-4 text-primary shrink-0" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Botón limpiar */}
@@ -377,11 +489,11 @@ export default function Home() {
                             </span>
                           )}
                         </div>
-                        <h3 className="font-bold text-foreground text-base sm:text-lg truncate group-hover:text-primary transition-colors" title={prod.nombre}>
-                          {prod.nombre || "Producto sin nombre"}
+                        <h3 className="font-bold text-foreground text-base sm:text-lg truncate group-hover:text-primary transition-colors" title={formatNombreProducto(prod.nombre)}>
+                          {formatNombreProducto(prod.nombre) || "Producto sin nombre"}
                         </h3>
                         <p className="text-xs sm:text-sm text-muted-foreground">
-                          Marca: <span className="font-semibold text-foreground/80">{prod.marca || "-"}</span>
+                          Marca: <span className="font-semibold text-foreground/80">{formatNombreProducto(prod.marca) || "-"}</span>
                         </p>
                         <div className="pt-1 flex flex-wrap gap-1.5">
                           {prod.cantidad_presentacion !== undefined && prod.cantidad_presentacion !== null && prod.cantidad_presentacion !== "" && (
