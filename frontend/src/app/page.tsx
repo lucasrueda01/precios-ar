@@ -178,9 +178,9 @@ export default function Home() {
 
   return (
     <main className="flex-1 flex flex-col items-center p-4 py-12 relative overflow-x-hidden min-h-0">
-      {/* Decorative background blobs */}
-      <div className="absolute top-0 left-1/4 w-96 h-96 bg-primary/20 rounded-full blur-3xl -z-10 mix-blend-multiply dark:mix-blend-lighten" />
-      <div className="absolute top-1/4 right-1/4 w-[30rem] h-[30rem] bg-accent/30 rounded-full blur-3xl -z-10 mix-blend-multiply dark:mix-blend-lighten delay-1000" />
+      {/* Decorative background blobs - optimizados para evitar sobrecarga de GPU y RAM */}
+      <div className="absolute top-0 left-1/4 w-96 h-96 bg-primary/10 rounded-full blur-2xl -z-10 pointer-events-none" />
+      <div className="absolute top-1/4 right-1/4 w-[30rem] h-[30rem] bg-accent/15 rounded-full blur-2xl -z-10 pointer-events-none" />
 
       <div className={`w-full max-w-3xl space-y-8 text-center transition-all duration-700 ease-in-out ${hasSearched ? 'mt-0' : 'mt-12 md:mt-24'}`}>
         <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -236,7 +236,7 @@ export default function Home() {
                   className="w-full h-14 pl-9 pr-8 appearance-none bg-transparent border-none outline-none focus:ring-2 focus:ring-primary text-sm font-medium cursor-pointer"
                 >
                   <option value="">Todo el país</option>
-                  <option value="auto">📍 Ubicación actual</option>
+                  <option value="auto">Ubicación actual</option>
                   <option value="AR-C">CABA</option>
                   <option value="AR-B">Buenos Aires</option>
                   <option value="AR-K">Catamarca</option>
@@ -316,10 +316,10 @@ export default function Home() {
                   disabled={loading}
                   className="bg-transparent font-semibold text-foreground outline-none cursor-pointer text-sm"
                 >
-                  <option value="relevancia">⚡ Relevancia</option>
-                  <option value="precio_asc">💵 Menor precio</option>
-                  <option value="precio_desc">💰 Mayor precio</option>
-                  <option value="alfa_asc">🔤 Alfabético (A-Z)</option>
+                  <option value="relevancia">Relevancia</option>
+                  <option value="precio_asc">Menor precio</option>
+                  <option value="precio_desc">Mayor precio</option>
+                  <option value="alfa_asc">Alfabético (A-Z)</option>
                 </select>
               </div>
 
@@ -352,7 +352,7 @@ export default function Home() {
                 return (
                   <div 
                     key={`${prod.producto_id || prod.id}-${prod.id_comercio}-${prod.id_sucursal}-${idx}`} 
-                    className="glass p-4 sm:p-5 rounded-2xl flex flex-col sm:flex-row gap-4 sm:items-center justify-between hover:bg-white/10 dark:hover:bg-white/5 transition-all duration-300 cursor-pointer group shadow-sm hover:shadow-md border border-border/40 hover:border-primary/40"
+                    className="bg-card/90 dark:bg-card/80 p-4 sm:p-5 rounded-2xl flex flex-col sm:flex-row gap-4 sm:items-center justify-between hover:bg-secondary/40 transition-colors duration-200 cursor-pointer group shadow-sm hover:shadow-md border border-border/60 hover:border-primary/40"
                   >
                     <div className="flex gap-4 items-start flex-1 min-w-0">
                       <div className="bg-secondary p-2.5 rounded-xl group-hover:scale-105 transition-transform duration-300 w-16 h-16 sm:w-20 sm:h-20 flex items-center justify-center shrink-0 overflow-hidden shadow-inner">
@@ -371,8 +371,9 @@ export default function Home() {
                             </span>
                           )}
                           {(prod.localidad || prod.provincia) && (
-                            <span className="text-xs text-muted-foreground font-medium truncate max-w-[200px]" title={prod.localidad || getProvinciaNombre(prod.provincia)}>
-                              📍 {prod.localidad || getProvinciaNombre(prod.provincia)}
+                            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground font-medium truncate max-w-[200px]" title={prod.localidad || getProvinciaNombre(prod.provincia)}>
+                              <MapPin className="w-3.5 h-3.5 shrink-0" />
+                              {prod.localidad || getProvinciaNombre(prod.provincia)}
                             </span>
                           )}
                         </div>

@@ -1,6 +1,9 @@
 import requests
 import time
+import urllib3
 import sqlalchemy as sa
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 engine = sa.create_engine(
     "postgresql+psycopg2://",
@@ -29,15 +32,17 @@ def limpiar_ean(ean: str) -> str:
     limpio = str(ean).lstrip("0")
     return limpio if limpio else ean
 
-def consultar_vtex(ean: str, dominio: str) -> dict | None:
+def consultar_vtex(ean: str, dominio: str) -> dict | str | None:
     ean_limpio = limpiar_ean(ean)
     url = f"https://www.{dominio}/api/catalog_system/pub/products/search?fq=alternateIds_Ean:{ean_limpio}"
     # Changomas tiene problemas de certificado SSL, deshabilitamos verificación
     verify_ssl = dominio != "changomas.com.ar"
     try:
         r = requests.get(url, headers=HEADERS, timeout=5, verify=verify_ssl)
-        if r.status_code != 200:
+        if r.status_code == 404:
             return None
+        if r.status_code != 200:
+            return "ERROR"
         datos = r.json()
         if not datos:
             return None
@@ -65,6 +70,9 @@ def consultar_vtex(ean: str, dominio: str) -> dict | None:
             "imagen_url":    imagen_url,
             "fuente":        dominio,
         }
+    except requests.exceptions.RequestException as e:
+        print(f"      [Error red {dominio}] {e}")
+        return "ERROR"
     except Exception as e:
         print(f"      [Error {dominio}] {e}")
         return None
@@ -83,23 +91,28 @@ def enriquecer(batch_size=200):
 
         if not rows:
             print("Todos los productos con EAN ya están enriquecidos.")
-            return
+            return 0
 
         print(f"Enriqueciendo {len(rows)} productos...\n")
         ok = 0
         sin_datos = 0
+        errores_red = 0
 
         for i, (ean,) in enumerate(rows, 1):
             print(f"  [{i}/{len(rows)}] EAN {ean}", end=" ... ")
 
             resultado = None
+            hubo_error_red = False
             for dominio in VTEX_DOMINIOS:
-                resultado = consultar_vtex(ean, dominio)
-                if resultado:
+                res = consultar_vtex(ean, dominio)
+                if isinstance(res, dict):
+                    resultado = res
                     break
+                elif res == "ERROR":
+                    hubo_error_red = True
                 time.sleep(0.2)
 
-            if resultado:
+            if isinstance(resultado, dict):
                 conn.execute(sa.text("""
                     INSERT INTO productos_vtex
                         (ean, nombre_vtex, marca_vtex, categoria,
@@ -119,6 +132,9 @@ def enriquecer(batch_size=200):
                 conn.commit()
                 print(f"✓ {resultado['subcategoria']} — {resultado['nombre_vtex'][:40]}")
                 ok += 1
+            elif hubo_error_red:
+                print("✗ error temporal/red (no se guardará not_found)")
+                errores_red += 1
             else:
                 conn.execute(sa.text("""
                     INSERT INTO productos_vtex (ean, fuente)
@@ -131,7 +147,10 @@ def enriquecer(batch_size=200):
 
             time.sleep(0.3)
 
-        print(f"\nResultado: {ok} enriquecidos, {sin_datos} no encontrados.")
+        print(f"\nResultado: {ok} enriquecidos, {sin_datos} no encontrados, {errores_red} errores de red.")
+        if errores_red > 0 and ok == 0 and sin_datos == 0:
+            print("Se detectaron fallos de red en todo el lote. Esperando 10 segundos para reintentar...")
+            time.sleep(10)
 
         total_ean = conn.execute(sa.text(
             "SELECT COUNT(*) FROM productos WHERE ean IS NOT NULL"
@@ -141,5 +160,14 @@ def enriquecer(batch_size=200):
         )).scalar()
         print(f"Cobertura: {con_imagen}/{total_ean} ({round(con_imagen/total_ean*100) if total_ean else 0}%)")
 
+        return len(rows)
+
 if __name__ == "__main__":
-    enriquecer(batch_size=200)
+    try:
+        while True:
+            resultado = enriquecer(batch_size=200)
+            if resultado == 0:
+                print("Todos los productos enriquecidos. Terminando.")
+                break
+    except KeyboardInterrupt:
+        print("\nProceso detenido por el usuario (Ctrl+C).")
