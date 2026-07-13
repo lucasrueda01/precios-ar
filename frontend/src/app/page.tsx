@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react"
 import { Search, MapPin, Loader2, ArrowRight, Package, Store, Calendar, Tag, ArrowUpDown, X, FilterX, ChevronDown, Check, Navigation } from "lucide-react"
+import ProductoDetailView from "@/components/ProductoDetailView"
 
 // Types matching our backend schema
 interface ProductoBase {
@@ -152,14 +153,58 @@ const ORDEN_LIST = [
 ];
 
 export default function Home() {
-  const [query, setQuery] = useState("")
-  const [province, setProvince] = useState<string>("AR-C") // CABA por defecto
-  const [orden, setOrden] = useState<string>("relevancia")
+  const [query, setQuery] = useState(() => {
+    if (typeof window !== "undefined") {
+      const saved = sessionStorage.getItem("precioar_search_state");
+      if (saved) {
+        try { return JSON.parse(saved).query || ""; } catch (e) {}
+      }
+    }
+    return "";
+  });
+
+  const [province, setProvince] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      const saved = sessionStorage.getItem("precioar_search_state");
+      if (saved) {
+        try { return JSON.parse(saved).province || "AR-C"; } catch (e) {}
+      }
+    }
+    return "AR-C";
+  });
+
+  const [orden, setOrden] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      const saved = sessionStorage.getItem("precioar_search_state");
+      if (saved) {
+        try { return JSON.parse(saved).orden || "relevancia"; } catch (e) {}
+      }
+    }
+    return "relevancia";
+  });
+
   const [locating, setLocating] = useState(false)
   const [openProvince, setOpenProvince] = useState(false)
   const [openOrden, setOpenOrden] = useState(false)
+  const [selectedProductId, setSelectedProductId] = useState<number | null>(null)
+  const savedScrollYRef = useRef<number>(0)
   const provinceDropdownRef = useRef<HTMLDivElement>(null)
   const ordenDropdownRef = useRef<HTMLDivElement>(null)
+
+  const handleSelectProduct = (id?: number) => {
+    if (!id) return;
+    savedScrollYRef.current = window.scrollY;
+    setSelectedProductId(id);
+  };
+
+  const handleBackFromProduct = () => {
+    setSelectedProductId(null);
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        window.scrollTo({ top: savedScrollYRef.current, behavior: "instant" });
+      }, 10);
+    });
+  };
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -175,8 +220,59 @@ export default function Home() {
   }, []);
 
   const [loading, setLoading] = useState(false)
-  const [results, setResults] = useState<ProductoBase[]>([])
-  const [hasSearched, setHasSearched] = useState(false)
+  const [results, setResults] = useState<ProductoBase[]>(() => {
+    if (typeof window !== "undefined") {
+      const saved = sessionStorage.getItem("precioar_search_state");
+      if (saved) {
+        try { return JSON.parse(saved).results || []; } catch (e) {}
+      }
+    }
+    return [];
+  });
+
+  const [hasSearched, setHasSearched] = useState(() => {
+    if (typeof window !== "undefined") {
+      const saved = sessionStorage.getItem("precioar_search_state");
+      if (saved) {
+        try { return Boolean(JSON.parse(saved).hasSearched); } catch (e) {}
+      }
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const saved = sessionStorage.getItem("precioar_search_state");
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (parsed && typeof parsed.scrollY === "number" && parsed.scrollY > 0) {
+            requestAnimationFrame(() => {
+              setTimeout(() => {
+                window.scrollTo({ top: parsed.scrollY, behavior: "instant" });
+              }, 50);
+            });
+          }
+        } catch (e) {}
+      }
+    }
+  }, []);
+
+  const saveStateToStorage = (newQuery: string, newProv: string, newOrden: string, newResults: ProductoBase[], newHasSearched: boolean, scrollY = 0) => {
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem(
+        "precioar_search_state",
+        JSON.stringify({
+          query: newQuery,
+          province: newProv,
+          orden: newOrden,
+          results: newResults,
+          hasSearched: newHasSearched,
+          scrollY,
+        })
+      );
+    }
+  };
 
   const fetchResults = async (searchQuery: string, searchProv: string, searchOrden: string) => {
     if (!searchQuery.trim()) return;
@@ -192,6 +288,7 @@ export default function Home() {
       if (!res.ok) throw new Error("Error en la búsqueda");
       const data = await res.json();
       setResults(data);
+      saveStateToStorage(searchQuery, searchProv, searchOrden, data, true, 0);
     } catch (error) {
       console.error(error);
       setResults([]);
@@ -217,6 +314,9 @@ export default function Home() {
     setOrden("relevancia");
     setHasSearched(false);
     setResults([]);
+    if (typeof window !== "undefined") {
+      sessionStorage.removeItem("precioar_search_state");
+    }
   };
 
   const handleLocate = () => {
@@ -251,6 +351,18 @@ export default function Home() {
       alert("No se pudo obtener la ubicación.")
       setLocating(false)
     })
+  }
+
+  if (selectedProductId !== null) {
+    return (
+      <main className="flex-1 flex flex-col items-center p-4 py-8 relative overflow-x-hidden min-h-0">
+        <ProductoDetailView
+          productoId={selectedProductId}
+          provincia={province}
+          onBack={handleBackFromProduct}
+        />
+      </main>
+    );
   }
 
   return (
@@ -463,8 +575,9 @@ export default function Home() {
                 
                 return (
                   <div 
-                    key={`${prod.producto_id || prod.id}-${prod.id_comercio}-${prod.id_sucursal}-${idx}`} 
-                    className="bg-card/90 dark:bg-card/80 p-4 sm:p-5 rounded-2xl flex flex-col sm:flex-row gap-4 sm:items-center justify-between hover:bg-secondary/40 transition-colors duration-200 cursor-pointer group shadow-sm hover:shadow-md border border-border/60 hover:border-primary/40"
+                    key={`${prod.producto_id || prod.id}-${prod.id_comercio}-${prod.id_sucursal}-${idx}`}
+                    onClick={() => handleSelectProduct(prod.producto_id || prod.id)}
+                    className="bg-card/90 dark:bg-card/80 p-4 sm:p-5 rounded-2xl flex flex-col sm:flex-row gap-4 sm:items-center justify-between hover:bg-secondary/40 transition-all duration-200 cursor-pointer group shadow-sm hover:shadow-md border border-border/60 hover:border-primary/40 text-left"
                   >
                     <div className="flex gap-4 items-start flex-1 min-w-0">
                       <div className="bg-secondary p-2.5 rounded-xl group-hover:scale-105 transition-transform duration-300 w-16 h-16 sm:w-20 sm:h-20 flex items-center justify-center shrink-0 overflow-hidden shadow-inner">

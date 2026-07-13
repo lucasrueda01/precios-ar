@@ -83,10 +83,116 @@ def search_productos(
 def get_producto(
     producto_id: int, provincia: Optional[str] = None, db: Session = Depends(get_db)
 ):
-    producto = (
-        db.query(models.VistaProducto).filter(models.VistaProducto.producto_id == producto_id).first()
-    )
+    query = db.query(models.VistaProducto).filter(models.VistaProducto.producto_id == producto_id)
+    if provincia:
+        producto = query.filter(models.VistaProducto.provincia == provincia).first()
+    else:
+        producto = None
+
+    if not producto:
+        producto = db.query(models.VistaProducto).filter(models.VistaProducto.producto_id == producto_id).first()
+
     if not producto:
         raise HTTPException(status_code=404, detail="Producto no encontrado")
 
-    return producto
+    precios_raw = (
+        db.query(
+            models.Precio,
+            models.Comercio.bandera_nombre,
+            models.Sucursal.nombre.label("sucursal_nombre"),
+            models.Sucursal.calle,
+            models.Sucursal.numero,
+            models.Sucursal.localidad,
+            models.Sucursal.provincia,
+        )
+        .join(
+            models.Comercio,
+            (models.Precio.id_comercio == models.Comercio.id_comercio)
+            & (models.Precio.id_bandera == models.Comercio.id_bandera),
+        )
+        .join(
+            models.Sucursal,
+            (models.Precio.id_comercio == models.Sucursal.id_comercio)
+            & (models.Precio.id_bandera == models.Sucursal.id_bandera)
+            & (models.Precio.id_sucursal == models.Sucursal.id_sucursal),
+        )
+        .filter(models.Precio.producto_id == producto_id)
+        .order_by(models.Precio.fecha.desc())
+        .limit(300)
+        .all()
+    )
+
+    precios_lista = []
+    vistos = set()
+    for p, bandera_nombre, sucursal_nombre, calle, numero, loc, prov in precios_raw:
+        if provincia and prov != provincia:
+            continue
+        key = (p.id_comercio, p.id_bandera, p.id_sucursal)
+        if key in vistos:
+            continue
+        vistos.add(key)
+
+        direccion_parts = [part for part in [calle, numero] if part]
+        direccion = " ".join(direccion_parts) if direccion_parts else None
+
+        precios_lista.append(
+            schemas.PrecioBase(
+                id_comercio=p.id_comercio,
+                id_bandera=p.id_bandera,
+                id_sucursal=p.id_sucursal,
+                bandera_nombre=bandera_nombre,
+                sucursal_nombre=sucursal_nombre,
+                direccion=direccion,
+                localidad=loc,
+                provincia=prov,
+                fecha=p.fecha,
+                precio_lista=p.precio_lista,
+                precio_promo1=p.precio_promo1,
+                leyenda_promo1=p.leyenda_promo1,
+                precio_promo2=p.precio_promo2,
+                leyenda_promo2=p.leyenda_promo2,
+                precio_referencia=p.precio_referencia,
+            )
+        )
+
+    if not precios_lista and provincia:
+        vistos.clear()
+        for p, bandera_nombre, sucursal_nombre, calle, numero, loc, prov in precios_raw:
+            key = (p.id_comercio, p.id_bandera, p.id_sucursal)
+            if key in vistos:
+                continue
+            vistos.add(key)
+            direccion_parts = [part for part in [calle, numero] if part]
+            direccion = " ".join(direccion_parts) if direccion_parts else None
+            precios_lista.append(
+                schemas.PrecioBase(
+                    id_comercio=p.id_comercio,
+                    id_bandera=p.id_bandera,
+                    id_sucursal=p.id_sucursal,
+                    bandera_nombre=bandera_nombre,
+                    sucursal_nombre=sucursal_nombre,
+                    direccion=direccion,
+                    localidad=loc,
+                    provincia=prov,
+                    fecha=p.fecha,
+                    precio_lista=p.precio_lista,
+                    precio_promo1=p.precio_promo1,
+                    leyenda_promo1=p.leyenda_promo1,
+                    precio_promo2=p.precio_promo2,
+                    leyenda_promo2=p.leyenda_promo2,
+                    precio_referencia=p.precio_referencia,
+                )
+            )
+
+    def get_precio_efectivo(item: schemas.PrecioBase):
+        pl = float(item.precio_lista or 0)
+        pp = float(item.precio_promo1 or 0)
+        if pp > 0 and pp < pl:
+            return pp
+        return pl if pl > 0 else 999999999
+
+    precios_lista.sort(key=get_precio_efectivo)
+
+    data = schemas.ProductoConPrecios.model_validate(producto)
+    data.precios = precios_lista
+    return data

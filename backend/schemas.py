@@ -7,6 +7,11 @@ class PrecioBase(BaseModel):
     id_comercio: int
     id_bandera: int
     id_sucursal: int
+    bandera_nombre: Optional[str] = None
+    sucursal_nombre: Optional[str] = None
+    direccion: Optional[str] = None
+    localidad: Optional[str] = None
+    provincia: Optional[str] = None
     fecha: date
     precio_lista: Optional[Decimal] = None
     precio_promo1: Optional[Decimal] = None
