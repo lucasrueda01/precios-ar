@@ -17,6 +17,9 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "PrecioAR - Buscador de Precios",
   description: "Encuentra el mejor precio en supermercados de Argentina.",
+  icons: {
+    icon: "/logo.svg",
+  },
 };
 
 export default function RootLayout({

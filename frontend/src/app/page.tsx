@@ -258,6 +258,20 @@ export default function Home() {
     }
   }, []);
 
+  useEffect(() => {
+    const handleResetHome = () => {
+      setQuery("");
+      setOrden("relevancia");
+      setHasSearched(false);
+      setResults([]);
+      setSelectedProductId(null);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    };
+
+    window.addEventListener("precioar_reset_home", handleResetHome);
+    return () => window.removeEventListener("precioar_reset_home", handleResetHome);
+  }, []);
+
   const saveStateToStorage = (newQuery: string, newProv: string, newOrden: string, newResults: ProductoBase[], newHasSearched: boolean, scrollY = 0) => {
     if (typeof window !== "undefined") {
       sessionStorage.setItem(
