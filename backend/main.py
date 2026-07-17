@@ -19,10 +19,39 @@ app.add_middleware(
 )
 
 
+@app.get("/localidades", response_model=List[str])
+@app.get("/api/localidades", response_model=List[str])
+def get_localidades(
+    provincia: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    if not provincia:
+        return []
+    from sqlalchemy import text
+    query = text("""
+        SELECT localidad FROM (
+            SELECT DISTINCT ON (TRANSLATE(LOWER(localidad), 'áéíóúàèìòùäëïöüñ', 'aeiouaeiouaeioun'))
+                   INITCAP(LOWER(localidad)) AS localidad,
+                   TRANSLATE(LOWER(localidad), 'áéíóúàèìòùäëïöüñ', 'aeiouaeiouaeioun') AS loc_norm
+            FROM sucursales
+            WHERE provincia = :provincia
+              AND localidad IS NOT NULL
+              AND localidad != ''
+            ORDER BY TRANSLATE(LOWER(localidad), 'áéíóúàèìòùäëïöüñ', 'aeiouaeiouaeioun'),
+                     CASE WHEN localidad ~ '[áéíóúÁÉÍÓÚñÑ]' THEN 0 ELSE 1 END,
+                     localidad
+        ) sub
+        ORDER BY loc_norm;
+    """)
+    results = db.execute(query, {"provincia": provincia}).scalars().all()
+    return [loc for loc in results if loc]
+
+
 @app.get("/api/productos/search", response_model=List[schemas.ProductoBase])
 def search_productos(
     q: str,
     provincia: Optional[str] = None,
+    localidad: Optional[str] = None,
     orden: Optional[str] = Query("relevancia"),
     db: Session = Depends(get_db),
     limit: int = Query(50, le=100),
@@ -37,6 +66,23 @@ def search_productos(
 
     if provincia:
         query = query.filter(models.VistaProducto.provincia == provincia)
+
+    if localidad:
+        subq = (
+            db.query(models.Comercio.bandera_nombre)
+            .join(
+                models.Sucursal,
+                (models.Sucursal.id_comercio == models.Comercio.id_comercio)
+                & (models.Sucursal.id_bandera == models.Comercio.id_bandera),
+            )
+            .filter(
+                func.translate(func.lower(models.Sucursal.localidad), 'áéíóúàèìòùäëïöüñ', 'aeiouaeiouaeioun')
+                == func.translate(func.lower(localidad), 'áéíóúàèìòùäëïöüñ', 'aeiouaeiouaeioun')
+            )
+        )
+        if provincia:
+            subq = subq.filter(models.Sucursal.provincia == provincia)
+        query = query.filter(models.VistaProducto.bandera_nombre.in_(subq))
 
     if orden == "precio_asc":
         query = query.order_by(
@@ -76,12 +122,30 @@ def search_productos(
             models.VistaProducto.precio_lista.asc()
         )
 
-    return query.limit(limit).all()
+    results = query.limit(limit).all()
+    if localidad:
+        for r in results:
+            setattr(r, 'localidad', localidad)
+    elif results:
+        loc_cache = {}
+        for r in results:
+            key = (r.id_comercio, r.provincia)
+            if key not in loc_cache:
+                loc_val = db.query(models.Sucursal.localidad).filter(
+                    models.Sucursal.id_comercio == r.id_comercio,
+                    models.Sucursal.provincia == r.provincia,
+                    models.Sucursal.localidad != None,
+                    models.Sucursal.localidad != ''
+                ).first()
+                loc_cache[key] = loc_val[0] if loc_val and loc_val[0] else None
+            if loc_cache[key]:
+                setattr(r, 'localidad', loc_cache[key])
+    return results
 
 
 @app.get("/api/productos/{producto_id}", response_model=schemas.ProductoConPrecios)
 def get_producto(
-    producto_id: int, provincia: Optional[str] = None, db: Session = Depends(get_db)
+    producto_id: int, provincia: Optional[str] = None, localidad: Optional[str] = None, db: Session = Depends(get_db)
 ):
     query = db.query(models.VistaProducto).filter(models.VistaProducto.producto_id == producto_id)
     if provincia:
@@ -127,6 +191,11 @@ def get_producto(
     for p, bandera_nombre, sucursal_nombre, calle, numero, loc, prov in precios_raw:
         if provincia and prov != provincia:
             continue
+        if localidad and loc:
+            norm_loc = loc.strip().lower().translate(str.maketrans('áéíóúàèìòùäëïöüñ', 'aeiouaeiouaeioun'))
+            norm_req = localidad.strip().lower().translate(str.maketrans('áéíóúàèìòùäëïöüñ', 'aeiouaeiouaeioun'))
+            if norm_loc != norm_req:
+                continue
         key = (p.id_comercio, p.id_bandera, p.id_sucursal)
         if key in vistos:
             continue
@@ -155,7 +224,7 @@ def get_producto(
             )
         )
 
-    if not precios_lista and provincia:
+    if not precios_lista and (provincia or localidad):
         vistos.clear()
         for p, bandera_nombre, sucursal_nombre, calle, numero, loc, prov in precios_raw:
             key = (p.id_comercio, p.id_bandera, p.id_sucursal)
@@ -192,6 +261,11 @@ def get_producto(
         return pl if pl > 0 else 999999999
 
     precios_lista.sort(key=get_precio_efectivo)
+
+    if localidad:
+        setattr(producto, 'localidad', localidad)
+    elif precios_lista and getattr(precios_lista[0], 'localidad', None):
+        setattr(producto, 'localidad', precios_lista[0].localidad)
 
     data = schemas.ProductoConPrecios.model_validate(producto)
     data.precios = precios_lista

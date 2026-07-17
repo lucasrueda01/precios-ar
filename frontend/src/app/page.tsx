@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { Search, MapPin, Loader2, ArrowRight, Package, Store, Calendar, Tag, ArrowUpDown, X, FilterX, ChevronDown, Check, Navigation } from "lucide-react"
+import { Search, MapPin, Loader2, ArrowRight, Package, Store, Calendar, Tag, ArrowUpDown, X, FilterX, ChevronDown, Check, Navigation, Building2 } from "lucide-react"
 import ProductoDetailView from "@/components/ProductoDetailView"
 
 // Types matching our backend schema
@@ -152,6 +152,12 @@ const ORDEN_LIST = [
   { value: "alfa_asc", label: "Alfabético (A-Z)" },
 ];
 
+const normStr = (s?: string) =>
+  (s || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+
 export default function Home() {
   const [query, setQuery] = useState(() => {
     if (typeof window !== "undefined") {
@@ -183,12 +189,29 @@ export default function Home() {
     return "relevancia";
   });
 
+  const [localidad, setLocalidad] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      const saved = sessionStorage.getItem("precioar_search_state");
+      if (saved) {
+        try { return JSON.parse(saved).localidad || ""; } catch (e) {}
+      }
+    }
+    return "";
+  });
+
+  const [localidadesList, setLocalidadesList] = useState<string[]>([]);
+  const [loadingLocalidades, setLoadingLocalidades] = useState(false);
+  const [openLocalidad, setOpenLocalidad] = useState(false);
+  const [localidadSearch, setLocalidadSearch] = useState("");
+  const prevProvinceRef = useRef(province);
+
   const [locating, setLocating] = useState(false)
   const [openProvince, setOpenProvince] = useState(false)
   const [openOrden, setOpenOrden] = useState(false)
   const [selectedProductId, setSelectedProductId] = useState<number | null>(null)
   const savedScrollYRef = useRef<number>(0)
   const provinceDropdownRef = useRef<HTMLDivElement>(null)
+  const localidadDropdownRef = useRef<HTMLDivElement>(null)
   const ordenDropdownRef = useRef<HTMLDivElement>(null)
 
   const handleSelectProduct = (id?: number) => {
@@ -211,6 +234,9 @@ export default function Home() {
       if (provinceDropdownRef.current && !provinceDropdownRef.current.contains(event.target as Node)) {
         setOpenProvince(false);
       }
+      if (localidadDropdownRef.current && !localidadDropdownRef.current.contains(event.target as Node)) {
+        setOpenLocalidad(false);
+      }
       if (ordenDropdownRef.current && !ordenDropdownRef.current.contains(event.target as Node)) {
         setOpenOrden(false);
       }
@@ -218,6 +244,45 @@ export default function Home() {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    const isProvinceChanged = prevProvinceRef.current !== province;
+    prevProvinceRef.current = province;
+
+    if (isProvinceChanged) {
+      setLocalidad("");
+      setLocalidadSearch("");
+    }
+
+    if (!province || province === "") {
+      setLocalidadesList([]);
+      setLoadingLocalidades(false);
+      return;
+    }
+
+    let isMounted = true;
+    const fetchLocalidades = async () => {
+      setLoadingLocalidades(true);
+      try {
+        const res = await fetch(`http://localhost:8000/api/localidades?provincia=${encodeURIComponent(province)}`);
+        if (!res.ok) throw new Error("Error cargando localidades");
+        const data = await res.json();
+        if (isMounted && Array.isArray(data)) {
+          setLocalidadesList(data);
+        }
+      } catch (err) {
+        console.error(err);
+        if (isMounted) setLocalidadesList([]);
+      } finally {
+        if (isMounted) setLoadingLocalidades(false);
+      }
+    };
+
+    fetchLocalidades();
+    return () => {
+      isMounted = false;
+    };
+  }, [province]);
 
   const [loading, setLoading] = useState(false)
   const [results, setResults] = useState<ProductoBase[]>(() => {
@@ -262,6 +327,7 @@ export default function Home() {
     const handleResetHome = () => {
       setQuery("");
       setOrden("relevancia");
+      setLocalidad("");
       setHasSearched(false);
       setResults([]);
       setSelectedProductId(null);
@@ -272,13 +338,14 @@ export default function Home() {
     return () => window.removeEventListener("precioar_reset_home", handleResetHome);
   }, []);
 
-  const saveStateToStorage = (newQuery: string, newProv: string, newOrden: string, newResults: ProductoBase[], newHasSearched: boolean, scrollY = 0) => {
+  const saveStateToStorage = (newQuery: string, newProv: string, newLoc: string, newOrden: string, newResults: ProductoBase[], newHasSearched: boolean, scrollY = 0) => {
     if (typeof window !== "undefined") {
       sessionStorage.setItem(
         "precioar_search_state",
         JSON.stringify({
           query: newQuery,
           province: newProv,
+          localidad: newLoc,
           orden: newOrden,
           results: newResults,
           hasSearched: newHasSearched,
@@ -288,7 +355,7 @@ export default function Home() {
     }
   };
 
-  const fetchResults = async (searchQuery: string, searchProv: string, searchOrden: string) => {
+  const fetchResults = async (searchQuery: string, searchProv: string, searchLoc: string, searchOrden: string) => {
     if (!searchQuery.trim()) return;
     setLoading(true);
     setHasSearched(true);
@@ -296,13 +363,16 @@ export default function Home() {
     try {
       let url = `http://localhost:8000/api/productos/search?q=${encodeURIComponent(searchQuery)}&orden=${searchOrden}`;
       if (searchProv) {
-        url += `&provincia=${searchProv}`;
+        url += `&provincia=${encodeURIComponent(searchProv)}`;
+      }
+      if (searchLoc) {
+        url += `&localidad=${encodeURIComponent(searchLoc)}`;
       }
       const res = await fetch(url);
       if (!res.ok) throw new Error("Error en la búsqueda");
       const data = await res.json();
       setResults(data);
-      saveStateToStorage(searchQuery, searchProv, searchOrden, data, true, 0);
+      saveStateToStorage(searchQuery, searchProv, searchLoc, searchOrden, data, true, 0);
     } catch (error) {
       console.error(error);
       setResults([]);
@@ -313,19 +383,20 @@ export default function Home() {
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    fetchResults(query, province, orden);
+    fetchResults(query, province, localidad, orden);
   };
 
   const handleOrdenChange = (newOrden: string) => {
     setOrden(newOrden);
     if (hasSearched && query.trim()) {
-      fetchResults(query, province, newOrden);
+      fetchResults(query, province, localidad, newOrden);
     }
   };
 
   const handleClearFilter = () => {
     setQuery("");
     setOrden("relevancia");
+    setLocalidad("");
     setHasSearched(false);
     setResults([]);
     if (typeof window !== "undefined") {
@@ -373,6 +444,7 @@ export default function Home() {
         <ProductoDetailView
           productoId={selectedProductId}
           provincia={province}
+          localidad={localidad}
           onBack={handleBackFromProduct}
         />
       </main>
@@ -385,7 +457,7 @@ export default function Home() {
       <div className="absolute top-0 left-1/4 w-96 h-96 bg-primary/10 rounded-full blur-2xl -z-10 pointer-events-none" />
       <div className="absolute top-1/4 right-1/4 w-[30rem] h-[30rem] bg-accent/15 rounded-full blur-2xl -z-10 pointer-events-none" />
 
-      <div className={`w-full max-w-3xl space-y-8 text-center transition-all duration-700 ease-in-out ${hasSearched ? 'mt-0' : 'mt-12 md:mt-24'}`}>
+      <div className={`w-full max-w-5xl space-y-8 text-center transition-all duration-700 ease-in-out ${hasSearched ? 'mt-0' : 'mt-12 md:mt-24'}`}>
         <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-700">
           <h1 className="text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tight text-foreground">
             Encuentra el <span className="text-primary">mejor precio</span> en tu zona.
@@ -395,9 +467,9 @@ export default function Home() {
           </p>
         </div>
 
-        <div className="glass rounded-2xl p-2 max-w-2xl mx-auto shadow-xl shadow-primary/5 dark:shadow-none animate-in fade-in slide-in-from-bottom-4 duration-700 delay-150 fill-mode-backwards">
-          <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-2">
-            <div className="relative flex-1 flex items-center">
+        <div className="glass rounded-2xl p-2 max-w-5xl mx-auto shadow-xl shadow-primary/5 dark:shadow-none animate-in fade-in slide-in-from-bottom-4 duration-700 delay-150 fill-mode-backwards">
+          <form onSubmit={handleSearch} className="flex flex-col md:flex-row gap-2">
+            <div className="relative flex-1 flex items-center min-w-[280px]">
               <Search className="absolute left-4 w-5 h-5 text-muted-foreground" />
               <input
                 type="text"
@@ -418,9 +490,9 @@ export default function Home() {
               )}
             </div>
 
-            <div className="h-14 sm:w-[1px] bg-border/50 hidden sm:block" />
+            <div className="h-14 md:w-[1px] bg-border/50 hidden md:block" />
 
-            <div ref={provinceDropdownRef} className="relative min-w-[170px]">
+            <div ref={provinceDropdownRef} className="relative w-full md:w-[170px] shrink-0">
               <button
                 type="button"
                 onClick={() => setOpenProvince(!openProvince)}
@@ -480,10 +552,134 @@ export default function Home() {
               )}
             </div>
 
+            <div className="h-14 md:w-[1px] bg-border/50 hidden md:block" />
+
+            <div ref={localidadDropdownRef} className="relative w-full md:w-[180px] shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  if (province && province !== "" && !loadingLocalidades) {
+                    setOpenLocalidad(!openLocalidad);
+                  }
+                }}
+                disabled={!province || province === "" || locating || loadingLocalidades}
+                className="w-full h-14 pl-10 pr-8 bg-secondary/50 hover:bg-secondary disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-secondary/50 text-foreground rounded-xl flex items-center justify-between gap-2 text-sm font-medium transition-all duration-200 border border-transparent focus:border-primary/50 outline-none"
+                title={!province || province === "" ? "Elige una provincia primero" : "Seleccionar localidad"}
+              >
+                <Building2 className="absolute left-3.5 w-4 h-4 text-primary pointer-events-none opacity-80" />
+                <span className="truncate">
+                  {loadingLocalidades
+                    ? "Cargando..."
+                    : !province || province === ""
+                    ? "Elige provincia"
+                    : localidad === ""
+                    ? "Todas las localidades"
+                    : localidad}
+                </span>
+                {loadingLocalidades ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-primary shrink-0" />
+                ) : (
+                  <ChevronDown
+                    className={`w-4 h-4 text-muted-foreground transition-transform duration-200 shrink-0 ${
+                      openLocalidad ? "rotate-180" : ""
+                    }`}
+                  />
+                )}
+              </button>
+
+              {openLocalidad && (
+                <div className="absolute left-0 sm:right-0 top-[calc(100%+8px)] z-50 w-72 max-h-80 flex flex-col rounded-2xl bg-background/95 dark:bg-zinc-900/95 backdrop-blur-xl border border-border/80 shadow-2xl p-2 animate-in fade-in slide-in-from-top-2 duration-200">
+                  <div className="relative mb-2 shrink-0">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <input
+                      type="text"
+                      placeholder="Buscar localidad..."
+                      value={localidadSearch}
+                      onChange={(e) => setLocalidadSearch(e.target.value)}
+                      className="w-full h-9 pl-9 pr-7 rounded-xl bg-secondary/70 text-sm outline-none border border-transparent focus:border-primary/50 transition-all text-foreground placeholder:text-muted-foreground"
+                      autoFocus
+                    />
+                    {localidadSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setLocalidadSearch("")}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded-full hover:bg-secondary text-muted-foreground"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="overflow-y-auto space-y-0.5 flex-1 pr-1 custom-scrollbar">
+                    {(normStr("todas las localidades").includes(normStr(localidadSearch.trim())) ||
+                      localidadSearch.trim() === "") && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOpenLocalidad(false);
+                          setLocalidad("");
+                          setLocalidadSearch("");
+                          if (hasSearched && query.trim()) {
+                            fetchResults(query, province, "", orden);
+                          }
+                        }}
+                        className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm font-medium transition-colors text-left ${
+                          localidad === ""
+                            ? "bg-primary/15 text-primary font-semibold"
+                            : "text-foreground hover:bg-secondary"
+                        }`}
+                      >
+                        <span>Todas las localidades</span>
+                        {localidad === "" && <Check className="w-4 h-4 text-primary shrink-0" />}
+                      </button>
+                    )}
+
+                    {localidadesList
+                      .filter((loc) =>
+                        normStr(loc).includes(normStr(localidadSearch.trim()))
+                      )
+                      .map((loc) => {
+                        const isSelected = localidad === loc;
+                        return (
+                          <button
+                            key={loc}
+                            type="button"
+                            onClick={() => {
+                              setOpenLocalidad(false);
+                              setLocalidad(loc);
+                              setLocalidadSearch("");
+                              if (hasSearched && query.trim()) {
+                                fetchResults(query, province, loc, orden);
+                              }
+                            }}
+                            className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm font-medium transition-colors text-left ${
+                              isSelected
+                                ? "bg-primary/15 text-primary font-semibold"
+                                : "text-foreground hover:bg-secondary"
+                            }`}
+                          >
+                            <span className="truncate">{loc}</span>
+                            {isSelected && <Check className="w-4 h-4 text-primary shrink-0" />}
+                          </button>
+                        );
+                      })}
+
+                    {localidadesList.filter((loc) =>
+                      normStr(loc).includes(normStr(localidadSearch.trim()))
+                    ).length === 0 && (
+                      <div className="py-6 text-center text-xs text-muted-foreground">
+                        No se encontraron localidades que coincidan con &ldquo;{localidadSearch}&rdquo;
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
             <button
               type="submit"
               disabled={loading}
-              className="h-14 px-8 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold rounded-xl flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-70 disabled:hover:scale-100"
+              className="h-14 px-8 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold rounded-xl flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-70 disabled:hover:scale-100 shrink-0"
             >
               Buscar
               {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <ArrowRight className="w-5 h-5" />}
@@ -502,7 +698,7 @@ export default function Home() {
 
       {/* Resultados de búsqueda */}
       {hasSearched && (
-        <div className="w-full max-w-4xl mx-auto mt-8 mb-12 animate-in fade-in slide-in-from-bottom-8 duration-500">
+        <div className="w-full max-w-5xl mx-auto mt-8 mb-12 animate-in fade-in slide-in-from-bottom-8 duration-500">
           {/* Barra de control de filtros y ordenamiento */}
           <div className="flex flex-wrap items-center justify-between gap-3 mb-6 bg-secondary/40 backdrop-blur-md p-3 px-4 rounded-2xl border border-border/40">
             <div className="text-sm font-medium text-muted-foreground">
@@ -609,12 +805,17 @@ export default function Home() {
                               {prod.bandera_nombre}
                             </span>
                           )}
-                          {(prod.localidad || prod.provincia) && (
-                            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground font-medium truncate max-w-[200px]" title={prod.localidad || getProvinciaNombre(prod.provincia)}>
-                              <MapPin className="w-3.5 h-3.5 shrink-0" />
-                              {prod.localidad || getProvinciaNombre(prod.provincia)}
-                            </span>
-                          )}
+                          {(prod.localidad || localidad || prod.provincia) && (() => {
+                            const loc = prod.localidad || localidad;
+                            const provText = getProvinciaNombre(prod.provincia);
+                            const text = loc && prod.provincia ? `${loc}, ${provText}` : loc || provText;
+                            return (
+                              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground font-medium truncate max-w-[260px]" title={text}>
+                                <MapPin className="w-3.5 h-3.5 shrink-0" />
+                                {text}
+                              </span>
+                            );
+                          })()}
                         </div>
                         <h3 className="font-bold text-foreground text-base sm:text-lg truncate group-hover:text-primary transition-colors" title={formatNombreProducto(prod.nombre)}>
                           {formatNombreProducto(prod.nombre) || "Producto sin nombre"}

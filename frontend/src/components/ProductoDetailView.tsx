@@ -153,12 +153,14 @@ function formatNombreProducto(nombre?: string): string {
 interface ProductoDetailViewProps {
   productoId: number;
   provincia?: string;
+  localidad?: string;
   onBack: () => void;
 }
 
 export default function ProductoDetailView({
   productoId,
   provincia = "",
+  localidad = "",
   onBack,
 }: ProductoDetailViewProps) {
   const [producto, setProducto] = useState<ProductoDetalle | null>(null);
@@ -177,9 +179,11 @@ export default function ProductoDetailView({
       setError("");
       try {
         let url = `http://localhost:8000/api/productos/${productoId}`;
-        if (provincia) {
-          url += `?provincia=${encodeURIComponent(provincia)}`;
-        }
+        const params = new URLSearchParams();
+        if (provincia) params.append("provincia", provincia);
+        if (localidad) params.append("localidad", localidad);
+        const queryString = params.toString();
+        if (queryString) url += `?${queryString}`;
         const res = await fetch(url);
         if (!res.ok) {
           throw new Error("No se pudo cargar la información del producto");
@@ -195,7 +199,7 @@ export default function ProductoDetailView({
     };
 
     fetchProducto();
-  }, [productoId, provincia]);
+  }, [productoId, provincia, localidad]);
 
   const copyToClipboard = (text?: string) => {
     if (!text) return;
@@ -422,7 +426,9 @@ export default function ProductoDetailView({
                         <MapPin className="w-3.5 h-3.5 text-muted-foreground/80" />
                         Región:{" "}
                         <strong className="text-foreground">
-                          {producto.localidad || getProvinciaNombre(producto.provincia)}
+                          {producto.localidad && producto.provincia
+                            ? `${producto.localidad}, ${getProvinciaNombre(producto.provincia)}`
+                            : producto.localidad || getProvinciaNombre(producto.provincia)}
                         </strong>
                       </span>
                     )}
